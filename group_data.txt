@@ -1,0 +1,9 @@
+Sample	Genotype	Sex	Height	Length
+1	WT	M	15	200
+2	WT	F	13	185
+3	WT	F	14	221
+4	WT	M	18	265
+5	KO	M	26	120
+6	KO	F	22	165
+7	KO	F	19	143
+8	KO	M	27	110

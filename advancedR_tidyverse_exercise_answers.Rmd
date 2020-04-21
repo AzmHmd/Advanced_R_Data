@@ -1,0 +1,621 @@
+---
+title: "Advanced R, with Tidyverse"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+---
+
+This is a worked set of answers to the Babraham R Tidyverse course
+
+Exercise 1 - Reading data into tibbles
+======================================
+
+First we are going to load the main tidyverse library.  This will cause the loading of the main data loading and manipulation packages from the tidyverse
+
+```{r}
+library(tidyverse)
+```
+
+Now we can import our first file. The ```small_file.txt``` file is a tab delimited file, so we load it with read_tsv.
+
+
+```{r}
+read_tsv("small_file.txt") -> small.file
+
+small.file
+```
+
+If we want to force the catgory column to be a factor then we can add a column definition to the column we want to change (all of the other columns are kept as they were).
+
+
+```{r}
+read_tsv("small_file.txt",
+         col_types = cols(Category=col_factor())) -> small.file
+
+small.file
+```
+Now we can see that ```Category``` is a factor, which doesn't have any immediate effect but can be useful when plotting.
+
+
+Now we can load the larger child_variants.csv file.
+
+```{r}
+read_csv("Child_Variants.csv") -> child.variants
+```
+
+This doesn't work properly because the chromosome data is incorrectly parsed due to the first 1000 lines being all numbers, and the lettered chromosomes don't appear until later.
+
+We can fix this by either increasing the number of lines R uses to guess the file formats, or by adding a column type specification when we load.  We only need to define the types for the columns which are incorrectly guessed.
+
+If we were to increase the guess size we would use
+
+```{r}
+read_csv("Child_Variants.csv", guess_max = 1000000) -> child.variants
+```
+
+If we wanted to specifically identify the column we want to change then we'd use:
+
+
+```{r}
+read_csv(
+  "Child_Variants.csv",
+  col_types=cols(
+    CHR=col_character()
+  )
+) -> child.variants
+
+child.variants
+```
+
+We can now plot out a plot looking at the coverage of each variant against the chromosome it comes from.
+
+```{r}
+child.variants %>%
+  ggplot(aes(x=CHR, y=COVERAGE)) +
+  geom_point()
+```
+
+
+
+Exercise 2 - Filtering and Selecting with dplyr
+===============================================
+
+We're going to read in the ```genomes.csv``` file.
+
+```{r}
+read_csv("genomes.csv") -> genomes
+
+head(genomes)
+```
+
+Now we're going to do some basic filtering.
+
+Find the organisms with more than 40 chromosomes.  I'll only show selected columns to make the output easier to see:
+
+```{r}
+genomes %>%
+  filter(Chromosomes > 40) %>%
+  select(Organism, Chromosomes)
+```
+
+Do any organisms containing a plasmid also have more than one chromosome?
+
+```{r}
+genomes %>%
+  filter(Plasmids > 0) %>%
+  filter(Chromosomes > 1) %>%
+  select(Organism, Chromosomes, Plasmids)
+```
+
+Make a list of the 10 organisms with the largest genomes:
+
+```{r}
+genomes %>%
+  arrange(desc(Size)) %>%
+  slice(1:10) %>%
+  select(Organism, Size)
+```
+
+Make a version of the data with Groups removed
+
+```{r}
+genomes %>%
+  select(-Groups)
+```
+
+Select the columns which start with "O"
+
+```{r}
+genomes %>%
+  select(starts_with("O"))
+```
+
+How many different groups are there?
+
+```{r}
+genomes %>%
+  distinct(Groups) %>%
+  nrow()
+```
+
+Plot a scatterplot of the number of chromosomes vs the genome size but showing only one organism for each chromosome number.  When deduplicating keep only the smallest genome for each chromosome number.  Exclude organisms with no listed chromosomes.
+
+To make this clearer I'm going to select only the columns I'm using.  This isn't necessary (the rest of the code will still work if I don't do this), but it makes it a little easier to see what's going on whilst developing the chain of operations.
+
+In the final plot the linear scaling of chromosome size wasn't all that informative so I plotted it on the log size which shows the overall trend more clearly.
+
+```{r}
+genomes %>%
+  select(Chromosomes, Size) %>%
+  arrange(Size) %>%
+  filter(Chromosomes > 0) %>%
+  distinct(Chromosomes, .keep_all = TRUE) %>%
+  ggplot(aes(x=Chromosomes, y=log(Size))) +
+  geom_point()
+  
+```
+
+
+
+
+
+Exercise 3 - More clever filtering
+==================================
+
+We'll load in the ```cancer_statistics.csv``` file.
+
+```{r}
+read_csv("cancer_stats.csv") -> cancer
+
+head(cancer)
+```
+
+
+For which Digestive System cancer types are there more female cases than male cases?
+
+Since these two test are combined with an AND logic we can either put them in a single filter statement or we could chain two filter statements together.
+
+This is the first place where we have column names with spaces in them, and therefore where they need to be quoted.  We can't put them in single or double quotes otherwise they'll be treated as text, so we use backticks.  By far the easiest way to get the quoting right is to select from the drop down list in RStudio which will handle this for you.
+
+```{r}
+cancer %>%
+  filter(Class=="Digestive System" & `Female Cases` > `Male Cases`)
+```
+
+Which cancer types have NA values for either male or female.
+
+```{r}
+cancer %>%
+  filter(is.na(`Male Cases`))
+```
+
+```{r}
+cancer %>%
+  filter(is.na(`Female Cases`))
+```
+
+I guess that makes sense.
+
+Which cancer type has the best survival rate for males?
+
+In reality it might be better to add a survival column to the data and then filter on that, but since we haven't seen how to do that yet we'll settle for doing it directly in the filter.
+
+```{r}
+cancer %>%
+  select(Class, Site, `Male Cases`, `Male Deaths`) %>%
+  arrange(`Male Deaths`/`Male Cases`) %>%
+  slice(1)
+```
+
+Which Sites have acute in their name?
+
+
+```{r}
+cancer %>%
+  filter(str_detect(Site,"acute"))
+```
+
+Out of tongue, kidney, breast and pancreas, which is classified as a soft tissue cancer?
+
+We can do this by initially making a vector of the things we want to test.
+
+```{r}
+c("tongue","kidney","breast","pancreas") -> tissues.to.test
+```
+
+Now we can find those tissues in the whole dataset
+
+```{r}
+cancer %>%
+  filter(Site %in% tissues.to.test)
+```
+
+But there's a problem - where's tongue?  It's not there because it's spelled with a capital T in the original data.  How could we do the filtering to ignore case?  We can do it by transforming the data to lower case as we do the test.  The preserves the original case in the result, but allows for case insensitive matches.
+
+```{r}
+cancer %>%
+  filter(tolower(Site) %in% tissues.to.test)
+```
+
+Now we can do ahead and find the answer to the original question
+
+```{r}
+cancer %>%
+  filter(tolower(Site) %in% tissues.to.test) %>%
+  filter(Class=="soft tissue")
+```
+
+Find sites with 4 or fewer letters in their name.
+
+For this we'll need to use a transformation of the text to its length when filtering.  We can either do this with the core ```nchar``` function, or the stringr ```str_length``` function.
+
+```{r}
+cancer %>%
+  filter(str_length(Site) <=4 )
+```
+
+Find all sites whose name ends with a "Y".
+
+Again we can either use the core ```substr``` function, or the stringr ```str_sub``` function.
+
+```{r}
+cancer %>%
+  filter(endsWith(Site,"y"))
+```
+
+
+Exercise 4 - Restructuring data into 'tidy' format
+==================================================
+
+We are going to look through a few different files to see how they can be restructured.  In each case we can ask the following questions:
+
+1. How many types of measurement are there
+
+2. Does the same type of measurement appear in more than one column?  If so how can we put them all in one column
+
+3. Are there any combined categorical variables which should be split apart?
+
+4. Are there any repeated annotation values which would be better split off into another table?
+
+5. Does the restructured data contain and NA values which would be better off being removed?
+
+tidy_data1
+----------
+```{r}
+read_csv("tidy_data1.csv") -> tidy1
+tidy1
+```
+
+This dataset has only one type of measurement, but it is split over 4 columns.  The sample names are all OK already and there is no additional annotation so there's nothing else to do once we've combined the whole dataset into a key/value pair.
+
+For the ```cols``` argument we need to select all columns.  We could do this in a number of ways;
+
+* ```DMSO:Akt1```
+
+* ```1:last_col()```
+
+..but we'll use the simpler ```everything()``` function to get the lot in one go.
+
+```{r}
+tidy1 %>%
+  pivot_longer(cols=everything(), names_to = "Sample", values_to = "Value") -> tidy1
+
+tidy1
+```
+
+Although this is better, if we look towards the end of the file we can see that there are still NA values in there.
+
+```{r}
+tail(tidy1)
+```
+
+We can use a filter to remove these.
+
+```{r}
+tidy1 %>%
+  filter(!is.na(Value)) -> tidy1
+
+tidy1
+```
+
+
+tidy_data2
+----------
+
+```{r}
+read_csv("tidy_data2.csv") -> tidy2
+tidy2
+```
+
+Here we have a bunch of data columns of the same type which we need to gather.  We need to leave the rest of the columns alone.  It's probably quicker to specify the columns we want to gather here rather than the ones we don't.
+
+```{r}
+tidy2 %>%
+  pivot_longer(cols=A:E, names_to = "sample", values_to = "value") -> tidy2
+
+tidy2
+```
+
+If this was real data then we'd want to seprate out all of the annotation information into a separate tibble, so we could have the ID,Chr, Start, End, Strand in one table, and just keep the ID in the main data tibble.  We could then recombine these where we needed the combined information and leave them separate otherwise.
+
+```{r}
+tidy2 %>%
+  select(ID:Strand) %>%
+  distinct(ID, .keep_all = TRUE) -> tidy2.annotation
+
+tidy2.annotation
+```
+
+```{r}
+tidy2 %>%
+  select(-(Chr:Strand)) -> tidy2
+
+tidy2
+```
+
+
+tidy_data3
+----------
+
+```{r}
+read_csv("tidy_data3.csv") -> tidy3
+tidy3
+```
+
+Here we have a lot of different measures but they are all of the same type so we need to gather them all together with ```pivot_longer```.  To select the columns to gather I'm going to use a select helper ```starts_with```.  I could have used a range ```WT_1:KO_3``` but wanted to show a way you could do fuzzy matching to account for less well structured data.
+
+Because our set of columns needs to be a single vector I combined the WT and KO columns with ```c()```
+
+```{r}
+tidy3 %>%
+  pivot_longer(cols=c(starts_with("WT"),starts_with("KO")),names_to = "sample",values_to = "value")
+```
+
+We still have a problem here in that the genotype (WT/KO) and the replicate number are combined, so we want to separate these apart using a split operation.
+
+```{r}
+tidy3 %>%
+  pivot_longer(cols=c(starts_with("WT"),starts_with("KO")),names_to = "sample",values_to = "value") %>%
+    separate(sample,into=c("genotype","replicate_number"),sep="_") -> tidy3
+
+tidy3
+```
+
+For a final level of tidying we could remove the symbol column to a separate tibble since it is synonymous with the Probe_ID column and we only need to keep one of these in the main data to act as an identifier.
+
+
+Finally we can split up the genomes ```Groups``` column into three separate columns and filter out some of the oddly named organisms (those with a quote in their name or who have a class of 'Other')
+
+```{r}
+genomes %>%
+  separate(col=Groups, into=c("Domain","Kingdom","Class"),sep=";") %>%
+  filter(! str_detect(Organism, "'")) %>%
+  filter(! (Kingdom=="Other" | Class=="Other"))
+```
+
+
+
+
+Exercise 5 - Mutating, Grouping and Summarising
+===============================================
+
+Mutating
+--------
+
+In the cancer data generate new variables for cases and deaths which sump up the male and female values.
+
+```{r}
+cancer %>%
+  mutate(
+    Deaths=`Male Deaths` + `Female Deaths`, 
+    Cases = `Male Cases` + `Female Cases`
+    ) -> cancer
+
+cancer
+```
+
+In child.varants create a new column called Type which has a value of "SNP" if both REF and ALT are only 1 letter and IDEL for all other cases.
+
+```{r}
+child.variants %>%
+  mutate(Type = if_else(str_length(REF)==1 & str_length(ALT)==1, "SNP", "INDEL")) -> child.variants
+
+child.variants
+```
+
+Grouping and Summarising
+------------------------
+
+Find the mean length per Category for the small_file data.  One nasty gotcha with this is that if you want to use a column in more than one calculation (eg here we want to use Length for both the mean and sd calculations), then you can't save to a column with the same name otherwise R gets confused.  That's why we call the output column MeanLength and not just Length.
+
+```{r}
+small.file %>%
+  group_by(Category) %>%
+    summarise(MeanLength=mean(Length),SD=sd(Length))
+```
+
+In child variants find genes which have at least 3 novel SNPs in them and calculate their average COVERAGE.
+
+```{r}
+child.variants %>% 
+  filter(dbSNP==".") %>%
+    filter(Type=="SNP") %>%
+      group_by(GENE) %>%
+        summarise(COVERAGE=mean(COVERAGE),COUNT=n()) %>%
+          filter(COUNT>2) %>%
+            arrange(desc(COVERAGE))
+
+```
+
+In tidy 2 find the mean value for each sample but weighing all chromsome equally.  To do this first we need to summarise by Chr but keep the sample split.
+
+When we cleaned up tidy2 we split out the Chr column into the annotation, so we'll rebuild it here and keep the chromosome this time.
+
+The order of operations will be:
+
+1. Extract just the chr and data columns (we don't care about the IDs for this analysis)
+
+2. Gather the data into Sample and Value columns
+
+3. Group by Sample and Chr this means that we'll summarise on the combination of the two first, and still be left with Sample as a grouping (the last one is removed), so we can...
+
+4. Summarise twice.  The first gives the mean per sample per chromosome, and then the second gets down to mean per sample (but from the chromosome means).
+
+```{r}
+
+read_csv("tidy_data2.csv") -> tidy2
+
+tidy2 %>%
+  select(Chr, A:E) %>%
+  pivot_longer(cols=A:E, names_to = "Sample",values_to = "Value") %>%
+  group_by(Sample, Chr) %>%
+  summarise(Value=mean(Value)) %>%
+  summarise(Value=mean(Value))
+
+```
+
+Find which cancer type has the closest incidence rate between males and females
+
+```{r}
+cancer %>%
+  mutate(mfdiff=abs(`Male Cases` - `Female Cases`)) %>%
+  select(Site,`Male Cases`,`Female Cases`,mfdiff) %>%
+  arrange(mfdiff) %>%
+  slice(1)
+```
+
+Find which cancer has the largest discrepancy in survival rates between males and females (excluding ones which only one sex can get)
+
+```{r}
+cancer %>%
+  filter(!(is.na(`Male Cases`) | is.na(`Female Cases`))) %>%
+  mutate(MaleRate=`Male Deaths`/`Male Cases`, FemaleRate=`Female Deaths`/`Female Cases`, rateDiff=abs(MaleRate-FemaleRate)) %>%
+  select(Class,Site,MaleRate:rateDiff) %>%
+  arrange(desc(rateDiff)) %>%
+  slice(1)
+```
+
+For each class of cancer find out which site has the best overall survival rate.
+
+For this we can calculate the survival rate for all sites and order the data by that.  We can then group it and do a slice on the data.  Since the data is grouped we'll get a sliced value for each group, and not just one for the whole dataset.
+
+```{r}
+cancer %>%
+  mutate(survival=(Cases - Deaths)/Cases) %>%
+  arrange(desc(survival)) %>%
+  group_by(Class) %>%
+  slice(1)
+```
+
+
+In child variants find out which gene on each chromosome has the highest number of variants
+
+```{r}
+child.variants %>%
+  group_by(CHR, GENE) %>%
+  summarise(count=n()) %>%
+  arrange(desc(count)) %>%
+  group_by(CHR) %>%
+  slice(1)
+```
+
+
+
+
+Exercise 6 - Extending and Joining
+==================================
+
+
+```{r}
+read_csv("dna_methylation.csv") -> dna.methylation
+dna.methylation
+```
+
+We need to get the percentage methylation for each gene.  The easiest way to do this is to put the counts into two seprate columns, one for meth and one for unmeth, and then use mutate to combine these into a single percentage methylation value.
+
+```{r}
+dna.methylation %>%
+  pivot_wider(names_from = State, values_from = Count) %>%
+    mutate(percent_meth=(100*Meth/(Meth+Unmeth))) -> dna.methylation
+
+dna.methylation
+```
+
+Now to get the mean methylation per group per gene.
+
+```{r}
+dna.methylation %>%
+  group_by(Gene, Group) %>%
+    summarise(mean_meth=mean(percent_meth)) -> per.condition.dna.meth
+
+per.condition.dna.meth
+```
+
+Now we can join this to the annotation for these genes.
+
+```{r}
+read_tsv("methylation_annotation.txt") -> methylation.annotation
+methylation.annotation
+```
+```{r}
+per.condition.dna.meth %>%
+  rename(Gene_name=Gene) %>%
+    left_join(methylation.annotation)
+```
+
+Find the counts of the different mutations in the child variants dataset.
+
+```{r}
+child.variants %>% 
+  select(ALT,REF) %>%
+    mutate(variant=str_c(ALT,">",REF)) %>%
+      group_by(variant) %>%
+        summarise(count=n()) %>%
+          arrange(desc(count))
+```
+
+
+Exercise 7 - Custom Functions
+=============================
+
+Write a function which calculates the lowest quality for the variants in child.variants in a specific gene.  Have it take the gene name as its only argument and output a one line tibble with just the GENE and QUAL values in it.  Use it to find the lowest quality for the AGRN1 gene.
+
+```{r}
+lowest.gene.q <- function(gene) {
+  child.variants %>%
+    filter(GENE == gene) %>%
+    arrange(QUAL) %>%
+    slice(1)
+}
+
+lowest.gene.q("AGRN")
+
+```
+
+Modify the script so that it now takes a tibble as its first argument rather than just being linked to child variants, and finds the lowest QUAL in the whole file (not for a specific gene).  Check that you can find the lowest quality in child.variants
+
+
+
+```{r}
+lowest.q <- function(tbl) {
+  tbl %>%
+    arrange(QUAL) %>%
+    slice(1)
+}
+
+child.variants %>% lowest.q()
+
+```
+
+
+Use the function you wrote above, along with group_by to find the lowest quality for all genes.
+
+```{r}
+child.variants %>%
+  group_by(GENE) %>%
+  lowest.q() %>%
+  arrange(QUAL)
+```
+
+

@@ -1,0 +1,142 @@
+---
+title: "Plotting with ggplot"
+output:
+  html_document:
+    toc: yes
+    toc_float: yes
+---
+
+This is a worked set of answers to the Babraham ggplot course
+
+```{r}
+library(tidyverse)
+```
+
+
+Exercise 1 - Simple Plots and Lines
+===================================
+
+Weight Chart
+------------
+Load the data from ```weight_chart.tsv```
+
+```{r}
+read_tsv("weight_chart.txt") -> weight
+weight
+```
+
+Draw a scatterplot of the the Age vs the Weight.
+
+
+```{r}
+weight %>%
+  ggplot(aes(x=Age, y=Weight)) +
+  geom_point()
+```
+
+Make all of the points filled with blue and have a size of 3.  These are both static aesthetics so they will go into the geometry function rather than the aes call of the ggplot function.
+
+```{r}
+weight %>%
+  ggplot(aes(x=Age, y=Weight)) +
+  geom_point(color="blue", size=3)
+```
+
+Change the geometry to geom_line to draw a line graph.
+
+```{r}
+weight %>%
+  ggplot(aes(x=Age, y=Weight)) +
+  geom_line()
+```
+
+Combine the two plots to give a point and line graph.  This will use two geometry layers.  We do the line plot first so that the points sit on top of the lines and not beneath them.
+
+```{r}
+weight %>%
+  ggplot(aes(x=Age, y=Weight)) +
+  geom_line() +
+  geom_point(color="blue", size=3)
+```
+
+Chromosome Position
+-------------------
+Load the data from ```chromosome_position_data.txt```
+
+```{r}
+read_tsv("chromosome_position_data.txt") -> chr.pos
+chr.pos
+```
+
+Gather the data into tidy format.  This is needed because at the moment we could plot out any individual dataset, or do a satterplot of one dataset against another, but if we want to plot all 3 datasets against the position then we'll need the data for all 3 datasets to be in the same column.
+
+```{r}
+chr.pos %>%
+  gather(key=sample, value=measure, -Position) -> chr.pos
+
+chr.pos
+```
+
+Draw a line graph of the position vs the measure splitting the different samples by colour.  Make the lines slightly thicker than default.
+
+```{r}
+chr.pos %>%
+  ggplot(aes(x=Position, y=measure, color=sample)) +
+  geom_line(size=1)
+```
+
+Genomes
+-------
+
+Load the ```genomes.csv``` file and use separate to turn the Groups column into Domain, Kingdom and Class.
+
+```{r}
+read_csv("genomes.csv") -> genomes
+head(genomes)
+```
+
+We can see that Groups is a combined value of 3 different values which we need to split apart
+
+```{r}
+genomes %>%
+  separate(Groups, into=c("Domain","Kingdom","Class"), sep=";") -> genomes
+
+genomes
+```
+
+Plot a point graph of log10 Size vs Chromosome and colour it by Domain
+
+```{r}
+genomes %>%
+  ggplot(aes(x=log10(Size), y=Chromosomes, color=Domain)) +
+  geom_point()
+```
+
+
+Exercise 2 - Barplots and Distributions
+=======================================
+
+small_file
+----------
+
+```{r}
+read_tsv("small_file.txt") -> small.file
+
+small.file
+```
+
+Plot a barplot of the lenghts of each sample from category A
+
+```{r}
+small.file %>%
+  filter(Category == "A")
+```
+
+
+
+
+
+
+
+
+
